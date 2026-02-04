@@ -129,6 +129,10 @@ app.use("/api/products", productRoutes);
 // ===============================
 // 💓 Health Check Route
 // ===============================
+app.get("/", (req, res) => {
+  res.send("Hello World - Backend is Running! 🚀");
+});
+
 app.get("/api/health", (req, res) => {
   res.json({
     status: "OK",
