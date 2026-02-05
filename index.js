@@ -54,7 +54,9 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:3000",
-    "https://matab-ecommerce-frontend.vercel.app"
+    "https://matab-ecommerce-frontend.vercel.app",
+    "https://www.matabalshifa.com",
+    "https://matabalshifa.com"
   ];
 
 app.use(
