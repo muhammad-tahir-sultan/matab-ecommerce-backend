@@ -1,21 +1,14 @@
 import Product from "../models/product.js";
 import Order from "../models/order.js";
 import User from "../models/user.js";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+import { v2 as cloudinary } from "cloudinary";
 
-// Resolve __dirname for ES module
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function ensureUploadsDir() {
-  const productsDir = path.join(__dirname, "..", "uploads", "products");
-  if (!fs.existsSync(productsDir)) {
-    fs.mkdirSync(productsDir, { recursive: true });
-  }
-  return productsDir;
-}
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 function sanitizeFileNameHint(fileNameHint) {
   const lowered = (fileNameHint || "image").toString().toLowerCase();
@@ -27,21 +20,23 @@ function sanitizeFileNameHint(fileNameHint) {
   );
 }
 
-function saveBase64ImageToDisk(base64Data, fileNameHint = "image") {
-  const matches = /^data:(.*?);base64,(.*)$/.exec(base64Data || "");
-  const mimeType = matches ? matches[1] : "image/png";
-  const dataPart = matches ? matches[2] : base64Data;
-  const extension = mimeType.split("/")[1] || "png";
+async function uploadToCloudinary(base64Data, fileNameHint = "image") {
+  // If we already have a URL, return it
+  if (typeof base64Data === 'string' && (base64Data.startsWith('http') || base64Data.startsWith('/uploads'))) {
+      return base64Data;
+  }
 
-  const uploadsDir = ensureUploadsDir();
   const safeHint = sanitizeFileNameHint(fileNameHint);
-  const fileName = `${safeHint}-${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2)}.${extension}`;
-  const filePath = path.join(uploadsDir, fileName);
-  const buffer = Buffer.from(dataPart, "base64");
-  fs.writeFileSync(filePath, buffer);
-  return `/uploads/products/${fileName}`;
+  try {
+    const result = await cloudinary.uploader.upload(base64Data, {
+      folder: "products",
+      public_id: `${safeHint}-${Date.now()}`,
+    });
+    return result.secure_url;
+  } catch (error) {
+    console.error("Cloudinary upload error:", error);
+    throw new Error("Image upload failed");
+  }
 }
 
 function makeAbsoluteUrl(req, urlPath) {
@@ -133,10 +128,14 @@ export const createProduct = async (req, res) => {
 
     let imageUrls = [];
     if (Array.isArray(images) && images.length > 0) {
-      imageUrls = images.map((img, idx) => {
-        const urlPath = saveBase64ImageToDisk(img, name || `product-${idx}`);
-        return makeAbsoluteUrl(req, urlPath);
-      });
+      try {
+        const uploadPromises = images.map((img, idx) =>
+          uploadToCloudinary(img, name || `product-${idx}`)
+        );
+        imageUrls = await Promise.all(uploadPromises);
+      } catch (error) {
+        return res.status(500).json({ message: "Image upload failed", error: error.message });
+      }
     }
 
     const product = new Product({
@@ -182,15 +181,19 @@ export const updateProduct = async (req, res) => {
 
     let nextImages = [];
     if (Array.isArray(images)) {
-      nextImages = images.map((img, idx) => {
-        if (typeof img === "string") {
-          if (img.startsWith("/uploads/")) return makeAbsoluteUrl(req, img);
-          if (img.startsWith("http://") || img.startsWith("https://"))
-            return img;
-        }
-        const urlPath = saveBase64ImageToDisk(img, name || `product-${idx}`);
-        return makeAbsoluteUrl(req, urlPath);
-      });
+      try {
+        const imagePromises = images.map(async (img, idx) => {
+          if (typeof img === "string") {
+            if (img.startsWith("/uploads/")) return makeAbsoluteUrl(req, img);
+            if (img.startsWith("http://") || img.startsWith("https://"))
+              return img;
+          }
+          return await uploadToCloudinary(img, name || `product-${idx}`);
+        });
+        nextImages = await Promise.all(imagePromises);
+      } catch (error) {
+        return res.status(500).json({ message: "Image upload failed", error: error.message });
+      }
     }
 
     const product = await Product.findByIdAndUpdate(
