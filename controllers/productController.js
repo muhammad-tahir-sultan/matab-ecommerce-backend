@@ -34,7 +34,7 @@ export const getAllProducts = catchAsync(async (req, res, next) => {
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
   const products = await Product.find(filter)
-    .populate("vendor", "username email")
+    .populate("managedBy", "username email")
     .sort(sortBy)
     .skip(skip)
     .limit(parseInt(limit));
@@ -65,7 +65,7 @@ export const getProductById = catchAsync(async (req, res, next) => {
   }
 
   const product = await Product.findById(id).populate(
-    "vendor",
+    "managedBy",
     "username email"
   );
 
@@ -108,7 +108,7 @@ export const getProductsByCategory = catchAsync(async (req, res, next) => {
     category: { $regex: new RegExp(categoryName, "i") },
     status: "active",
   })
-    .populate("vendor", "username email")
+    .populate("managedBy", "username email")
     .sort(sortBy)
     .skip(skip)
     .limit(parseInt(limit));
@@ -174,7 +174,7 @@ export const searchProductsForCompare = catchAsync(async (req, res, next) => {
   }
 
   const products = await Product.find(searchQuery)
-    .populate("vendor", "username email businessName")
+    .populate("managedBy", "username email businessName")
     .sort({ createdAt: -1 })
     .limit(parseInt(limit));
 
@@ -206,7 +206,7 @@ export const getProductsByIds = catchAsync(async (req, res, next) => {
   const products = await Product.find({
     _id: { $in: limitedIds },
     status: "active"
-  }).populate("vendor", "username email businessName");
+  }).populate("managedBy", "username email businessName");
 
   res.status(200).json({
     success: true,
@@ -243,7 +243,7 @@ export const getSimilarProducts = catchAsync(async (req, res, next) => {
     },
     status: "active"
   })
-    .populate("vendor", "username email businessName")
+    .populate("managedBy", "username email businessName")
     .sort({ createdAt: -1 })
     .limit(parseInt(limit));
 
